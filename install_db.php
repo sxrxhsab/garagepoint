@@ -2,9 +2,9 @@
 // install_db.php - Installer les tables sur Render
 require_once 'config/database.php';
 
-try {
-    echo "🔧 Installation des tables...<br><br>";
+echo "🔧 Installation des tables...<br><br>";
 
+try {
     // ============================================
     // CRÉATION DES TABLES
     // ============================================
