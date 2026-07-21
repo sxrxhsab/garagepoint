@@ -1,0 +1,18 @@
+# Fichiers de configuration
+config/database.php
+
+# Dossiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers de logs
+*.log
+error_log
+
+# IDE
+.vscode/
+.idea/
+
+# Fichiers de session PHP
+sessions/
+tmp/
