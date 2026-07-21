@@ -1,5 +1,5 @@
 <?php
-// scan.php - Version Ultra WOW avec toutes les animations
+// scan.php - Pointage par code PIN (Version PostgreSQL)
 session_start();
 require_once __DIR__ . '/config/database.php';
 ?>
@@ -8,11 +8,10 @@ require_once __DIR__ . '/config/database.php';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pointage Pro - GaragePoint</title>
+    <title>Pointage - GaragePoint</title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        /* ===== BASE ===== */
         body {
             background: var(--bg-primary);
             min-height: 100vh;
@@ -33,7 +32,6 @@ require_once __DIR__ . '/config/database.php';
             opacity: 0;
         }
 
-        /* ===== CARD ===== */
         .scan-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -58,65 +56,111 @@ require_once __DIR__ . '/config/database.php';
             animation: rotate 20s linear infinite;
         }
 
-        /* ===== HEADER ===== */
         .scan-header {
-            text-align: center;
-            margin-bottom: 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
             position: relative;
             z-index: 1;
         }
 
+        .scan-header .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
         .scan-header .logo-wrapper {
-            display: inline-block;
-            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
             border-radius: 50%;
             background: linear-gradient(135deg, rgba(108, 99, 255, 0.1), rgba(0, 212, 170, 0.1));
             border: 1px solid var(--border-color);
-            margin-bottom: 12px;
-            animation: float 3s ease-in-out infinite;
         }
 
         .scan-header .logo-wrapper img {
-            height: 52px;
-            width: 52px;
+            height: 36px;
+            width: 36px;
             object-fit: contain;
             display: block;
         }
 
-        .scan-header h1 {
-            font-size: 28px;
+        .scan-header .title-section {
+            text-align: left;
+        }
+
+        .scan-header .title-section h1 {
+            font-size: 20px;
             font-weight: 700;
             background: linear-gradient(135deg, #fff 30%, var(--primary));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            line-height: 1.2;
         }
 
-        .scan-header p {
+        .scan-header .title-section p {
             color: var(--text-secondary);
-            font-size: 14px;
-            margin-top: 2px;
+            font-size: 11px;
+            margin-top: 0px;
         }
 
-        .scan-header .status-badge {
+        .scan-header .admin-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(108, 99, 255, 0.08);
+            border: 1px solid rgba(108, 99, 255, 0.15);
+            border-radius: 50px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: var(--transition);
+            cursor: pointer;
+        }
+
+        .scan-header .admin-btn:hover {
+            background: rgba(108, 99, 255, 0.15);
+            border-color: var(--primary);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(108, 99, 255, 0.15);
+        }
+
+        .scan-header .admin-btn i {
+            color: var(--primary);
+            font-size: 14px;
+        }
+
+        .status-bar {
+            text-align: center;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .status-bar .status-badge {
             display: inline-block;
-            padding: 5px 18px;
+            padding: 4px 16px;
             border-radius: 50px;
             font-size: 12px;
             font-weight: 600;
-            margin-top: 8px;
-            background: rgba(0, 212, 170, 0.1);
+            background: rgba(0, 212, 170, 0.08);
             color: var(--secondary);
-            border: 1px solid rgba(0, 212, 170, 0.15);
+            border: 1px solid rgba(0, 212, 170, 0.12);
             animation: pulseGlow 2s ease-in-out infinite;
         }
 
-        .scan-header .status-badge i {
+        .status-bar .status-badge i {
             font-size: 8px;
             vertical-align: middle;
             animation: pulse 1.5s infinite;
         }
 
-        /* ===== PIN DISPLAY ===== */
         .pin-display {
             background: var(--bg-input);
             border: 1px solid var(--border-color);
@@ -212,7 +256,6 @@ require_once __DIR__ . '/config/database.php';
             vertical-align: middle;
         }
 
-        /* ===== NUMPAD ===== */
         .numpad {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -304,7 +347,6 @@ require_once __DIR__ . '/config/database.php';
             border-color: var(--warning);
         }
 
-        /* ===== ACTIONS ===== */
         .actions {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -401,7 +443,6 @@ require_once __DIR__ . '/config/database.php';
             box-shadow: 0 8px 30px rgba(255, 107, 107, 0.35);
         }
 
-        /* ===== USER INFO ===== */
         .user-info {
             background: linear-gradient(135deg, rgba(108, 99, 255, 0.06), rgba(0, 212, 170, 0.04));
             border: 1px solid rgba(108, 99, 255, 0.12);
@@ -455,29 +496,6 @@ require_once __DIR__ . '/config/database.php';
             letter-spacing: 1px;
         }
 
-        /* ===== FOOTER ===== */
-        .scan-footer {
-            text-align: center;
-            margin-top: 20px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .scan-footer a {
-            color: var(--text-muted);
-            font-size: 13px;
-            text-decoration: none;
-            transition: var(--transition);
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .scan-footer a:hover {
-            color: var(--primary);
-        }
-
-        /* ===== CONFETTI ===== */
         .confetti-container {
             position: fixed;
             top: 0;
@@ -508,7 +526,6 @@ require_once __DIR__ . '/config/database.php';
             }
         }
 
-        /* ===== SUCCESS OVERLAY ===== */
         .success-overlay {
             position: fixed;
             top: 0;
@@ -574,10 +591,9 @@ require_once __DIR__ . '/config/database.php';
             opacity: 0;
         }
 
-        /* ===== RESPONSIVE ===== */
         @media (max-width: 480px) {
             .scan-card {
-                padding: 20px;
+                padding: 16px;
                 border-radius: var(--radius-sm);
             }
             .pin-digit {
@@ -602,29 +618,26 @@ require_once __DIR__ . '/config/database.php';
             .success-overlay .check {
                 font-size: 72px;
             }
-            .scan-header h1 {
-                font-size: 22px;
+            .scan-header .title-section h1 {
+                font-size: 16px;
             }
             .scan-header .logo-wrapper img {
-                height: 40px;
-                width: 40px;
+                height: 28px;
+                width: 28px;
             }
-            .user-info .name {
-                font-size: 17px;
+            .scan-header .admin-btn {
+                padding: 6px 12px;
+                font-size: 11px;
             }
-            .user-info .avatar {
-                width: 44px;
-                height: 44px;
-                font-size: 18px;
+            .scan-header .admin-btn i {
+                font-size: 12px;
             }
         }
     </style>
 </head>
 <body>
 
-    <!-- ============================================ -->
     <!-- SUCCESS OVERLAY -->
-    <!-- ============================================ -->
     <div class="success-overlay" id="successOverlay">
         <div class="check"><i class="fas fa-check-circle"></i></div>
         <div class="s-name" id="sName">Jean Dupont</div>
@@ -633,24 +646,32 @@ require_once __DIR__ . '/config/database.php';
         <div class="s-badge" id="sBadge">Mécanicien • PIN: 1234</div>
     </div>
 
-    <!-- ============================================ -->
     <!-- CONFETTI -->
-    <!-- ============================================ -->
     <div class="confetti-container" id="confettiContainer"></div>
 
-    <!-- ============================================ -->
     <!-- MAIN -->
-    <!-- ============================================ -->
     <div class="scan-wrapper">
         <div class="scan-card">
 
             <!-- HEADER -->
             <div class="scan-header">
-                <div class="logo-wrapper">
-                    <img src="assets/images/garagelogo.png" alt="GaragePoint">
+                <div class="logo-section">
+                    <div class="logo-wrapper">
+                        <img src="assets/images/garagelogo.png" alt="GaragePoint">
+                    </div>
+                    <div class="title-section">
+                        <h1>GaragePoint</h1>
+                        <p>Pointage sécurisé</p>
+                    </div>
                 </div>
-                <h1>GaragePoint</h1>
-                <p>Pointage sécurisé par code PIN</p>
+                <a href="admin/login.php" class="admin-btn">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>Admin</span>
+                </a>
+            </div>
+
+            <!-- STATUS -->
+            <div class="status-bar">
                 <span class="status-badge">
                     <i class="fas fa-circle"></i> Prêt
                 </span>
@@ -714,19 +735,9 @@ require_once __DIR__ . '/config/database.php';
                 <div class="code" id="userCode">PIN: 1234</div>
             </div>
 
-            <!-- FOOTER -->
-            <div class="scan-footer">
-                <a href="index.php">
-                    <i class="fas fa-arrow-left"></i> Retour à l'accueil
-                </a>
-            </div>
-
         </div>
     </div>
 
-    <!-- ============================================ -->
-    <!-- SCRIPTS -->
-    <!-- ============================================ -->
     <script>
         let pin = '';
         let currentUser = null;
@@ -742,7 +753,6 @@ require_once __DIR__ . '/config/database.php';
                 gain.connect(ctx.destination);
 
                 if (type === 'success') {
-                    // Son mélodieux à 3 notes
                     osc.frequency.value = 880;
                     osc.type = 'sine';
                     gain.gain.value = 0.2;
@@ -809,13 +819,6 @@ require_once __DIR__ . '/config/database.php';
                 'pause': '☕ Pause enregistrée',
                 'reprise': '▶️ Reprise enregistrée',
                 'depart': '🚗 Départ enregistré'
-            };
-
-            const emojis = {
-                'arrivee': '👋',
-                'pause': '☕',
-                'reprise': '▶️',
-                'depart': '🚗'
             };
 
             document.getElementById('sName').textContent = name;
@@ -1010,7 +1013,7 @@ require_once __DIR__ . '/config/database.php';
             } else if (e.key === 'Escape') {
                 clearPin();
             } else if (e.key === 'Enter') {
-                // Si on a un utilisateur reconnu, pointer automatiquement (Arrivée par défaut)
+                // Si on a un utilisateur reconnu, pointer automatiquement
                 if (currentUser && !isProcessing) {
                     // Déterminer le type automatiquement
                     fetch(`api/dernier_pointage.php?employe_id=${currentUser.id}`)
