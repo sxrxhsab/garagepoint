@@ -1,50 +1,92 @@
 <?php
-// admin/dashboard.php - Avec Hichem Slimani
+// admin/dashboard.php - Version PostgreSQL corrigée
 session_start();
 require_once __DIR__ . '/../config/database.php';
-require_once '../includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 requireAdmin();
 
 // ============================================
 // STATISTIQUES
 // ============================================
 
+// Total employés
 $totalEmployes = $pdo->query("SELECT COUNT(*) FROM employes")->fetchColumn();
 
-$present = $pdo->query("
-    SELECT COUNT(DISTINCT employe_id) FROM pointages 
-    WHERE date = CURDATE() AND type = 'arrivee' 
-    AND employe_id NOT IN (SELECT employe_id FROM pointages WHERE date = CURDATE() AND type = 'depart')
-")->fetchColumn();
+// Présents aujourd'hui
+$stmt = $pdo->query("
+    SELECT COUNT(DISTINCT employe_id) 
+    FROM pointages 
+    WHERE date = CURRENT_DATE 
+    AND type = 'arrivee' 
+    AND employe_id NOT IN (
+        SELECT employe_id 
+        FROM pointages 
+        WHERE date = CURRENT_DATE 
+        AND type = 'depart'
+    )
+");
+$present = $stmt->fetchColumn();
 
-$enPause = $pdo->query("
-    SELECT COUNT(DISTINCT employe_id) FROM pointages 
-    WHERE date = CURDATE() AND type = 'pause' 
-    AND employe_id NOT IN (SELECT employe_id FROM pointages WHERE date = CURDATE() AND type = 'reprise')
-    AND employe_id NOT IN (SELECT employe_id FROM pointages WHERE date = CURDATE() AND type = 'depart')
-")->fetchColumn();
+// En pause
+$stmt = $pdo->query("
+    SELECT COUNT(DISTINCT employe_id) 
+    FROM pointages 
+    WHERE date = CURRENT_DATE 
+    AND type = 'pause' 
+    AND employe_id NOT IN (
+        SELECT employe_id 
+        FROM pointages 
+        WHERE date = CURRENT_DATE 
+        AND type = 'reprise'
+    )
+    AND employe_id NOT IN (
+        SELECT employe_id 
+        FROM pointages 
+        WHERE date = CURRENT_DATE 
+        AND type = 'depart'
+    )
+");
+$enPause = $stmt->fetchColumn();
+
+// Partis
+$stmt = $pdo->query("
+    SELECT COUNT(DISTINCT employe_id) 
+    FROM pointages 
+    WHERE date = CURRENT_DATE 
+    AND type = 'depart'
+");
+$partis = $stmt->fetchColumn();
 
 $absents = $totalEmployes - $present;
 $tauxPresence = $totalEmployes > 0 ? round(($present / $totalEmployes) * 100) : 0;
 
+// ============================================
+// STATISTIQUES AVANCÉES
+// ============================================
+
 // Arrivées, départs, pauses
-$arrivees = $pdo->query("SELECT COUNT(*) FROM pointages WHERE date = CURDATE() AND type = 'arrivee'")->fetchColumn();
-$departs = $pdo->query("SELECT COUNT(*) FROM pointages WHERE date = CURDATE() AND type = 'depart'")->fetchColumn();
-$pauses = $pdo->query("SELECT COUNT(*) FROM pointages WHERE date = CURDATE() AND type = 'pause'")->fetchColumn();
-$retards = $pdo->query("SELECT COUNT(*) FROM pointages WHERE date = CURDATE() AND type = 'arrivee' AND heure > '08:30:00'")->fetchColumn();
+$arrivees = $pdo->query("SELECT COUNT(*) FROM pointages WHERE date = CURRENT_DATE AND type = 'arrivee'")->fetchColumn();
+$departs = $pdo->query("SELECT COUNT(*) FROM pointages WHERE date = CURRENT_DATE AND type = 'depart'")->fetchColumn();
+$pauses = $pdo->query("SELECT COUNT(*) FROM pointages WHERE date = CURRENT_DATE AND type = 'pause'")->fetchColumn();
+$retards = $pdo->query("SELECT COUNT(*) FROM pointages WHERE date = CURRENT_DATE AND type = 'arrivee' AND heure > '08:30:00'")->fetchColumn();
 
 // Heure de pointe
 $heurePointe = $pdo->query("
-    SELECT HOUR(heure) as h FROM pointages
-    WHERE type = 'arrivee' AND date = CURDATE()
-    GROUP BY HOUR(heure) ORDER BY COUNT(*) DESC LIMIT 1
+    SELECT EXTRACT(HOUR FROM heure) as h 
+    FROM pointages
+    WHERE type = 'arrivee' AND date = CURRENT_DATE
+    GROUP BY h 
+    ORDER BY COUNT(*) DESC 
+    LIMIT 1
 ")->fetch();
 
 // Moyenne arrivée
 $moyenneArrivee = $pdo->query("
-    SELECT AVG(HOUR(heure) * 60 + MINUTE(heure)) as avg_minutes
-    FROM pointages WHERE type = 'arrivee' AND date = CURDATE()
+    SELECT AVG(EXTRACT(HOUR FROM heure) * 60 + EXTRACT(MINUTE FROM heure)) as avg_minutes
+    FROM pointages 
+    WHERE type = 'arrivee' AND date = CURRENT_DATE
 ")->fetch();
+
 $heureMoyenne = '';
 if ($moyenneArrivee && $moyenneArrivee['avg_minutes']) {
     $avg = round($moyenneArrivee['avg_minutes']);
@@ -54,16 +96,21 @@ if ($moyenneArrivee && $moyenneArrivee['avg_minutes']) {
 // Derniers pointages
 $pointages = $pdo->query("
     SELECT p.*, e.nom, e.prenom, e.poste 
-    FROM pointages p JOIN employes e ON p.employe_id = e.id 
-    ORDER BY p.created_at DESC LIMIT 10
+    FROM pointages p 
+    JOIN employes e ON p.employe_id = e.id 
+    ORDER BY p.created_at DESC 
+    LIMIT 10
 ")->fetchAll();
 
-// Top ponctuels
+// Top 5 ponctuels
 $topPonctuels = $pdo->query("
     SELECT e.nom, e.prenom, COUNT(*) as nb
-    FROM pointages p JOIN employes e ON p.employe_id = e.id
+    FROM pointages p 
+    JOIN employes e ON p.employe_id = e.id
     WHERE p.type = 'arrivee' AND p.heure < '08:30:00'
-    GROUP BY e.id ORDER BY nb DESC LIMIT 5
+    GROUP BY e.id, e.nom, e.prenom 
+    ORDER BY nb DESC 
+    LIMIT 5
 ")->fetchAll();
 
 $plusPonctuel = $topPonctuels[0] ?? null;
@@ -71,13 +118,13 @@ $plusPonctuel = $topPonctuels[0] ?? null;
 // Employés présents
 $employesPresent = $pdo->query("
     SELECT e.id, e.nom, e.prenom, e.poste,
-           (SELECT heure FROM pointages WHERE employe_id = e.id AND type = 'arrivee' AND date = CURDATE() ORDER BY created_at DESC LIMIT 1) as arrivee,
-           (SELECT heure FROM pointages WHERE employe_id = e.id AND type = 'pause' AND date = CURDATE() ORDER BY created_at DESC LIMIT 1) as pause
+           (SELECT heure FROM pointages WHERE employe_id = e.id AND type = 'arrivee' AND date = CURRENT_DATE ORDER BY created_at DESC LIMIT 1) as arrivee,
+           (SELECT heure FROM pointages WHERE employe_id = e.id AND type = 'pause' AND date = CURRENT_DATE ORDER BY created_at DESC LIMIT 1) as pause
     FROM employes e
     WHERE e.id IN (
         SELECT employe_id FROM pointages 
-        WHERE date = CURDATE() AND type = 'arrivee' 
-        AND employe_id NOT IN (SELECT employe_id FROM pointages WHERE date = CURDATE() AND type = 'depart')
+        WHERE date = CURRENT_DATE AND type = 'arrivee' 
+        AND employe_id NOT IN (SELECT employe_id FROM pointages WHERE date = CURRENT_DATE AND type = 'depart')
     )
     ORDER BY arrivee ASC
 ")->fetchAll();
@@ -85,15 +132,17 @@ $employesPresent = $pdo->query("
 // Premier et dernier arrivé
 $premierArrive = $pdo->query("
     SELECT e.nom, e.prenom, p.heure
-    FROM pointages p JOIN employes e ON p.employe_id = e.id
-    WHERE p.type = 'arrivee' AND p.date = CURDATE()
+    FROM pointages p 
+    JOIN employes e ON p.employe_id = e.id
+    WHERE p.type = 'arrivee' AND p.date = CURRENT_DATE
     ORDER BY p.heure ASC LIMIT 1
 ")->fetch();
 
 $dernierArrive = $pdo->query("
     SELECT e.nom, e.prenom, p.heure
-    FROM pointages p JOIN employes e ON p.employe_id = e.id
-    WHERE p.type = 'arrivee' AND p.date = CURDATE()
+    FROM pointages p 
+    JOIN employes e ON p.employe_id = e.id
+    WHERE p.type = 'arrivee' AND p.date = CURRENT_DATE
     ORDER BY p.heure DESC LIMIT 1
 ")->fetch();
 ?>
@@ -309,7 +358,7 @@ $dernierArrive = $pdo->query("
 
 <div class="max-w-7xl mx-auto">
 
-    <!-- ===== HEADER AVEC LOGO ET NOM ADMIN ===== -->
+    <!-- HEADER -->
     <div class="flex flex-wrap justify-between items-center gap-4 mb-8">
         <div class="logo-header">
             <img src="../assets/images/garagelogo.png" alt="GaragePoint">
@@ -341,7 +390,7 @@ $dernierArrive = $pdo->query("
         </div>
     </div>
 
-    <!-- ===== STATS PRINCIPALES ===== -->
+    <!-- STATS PRINCIPALES -->
     <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="stat-card glass-card">
             <div class="icon" style="background:rgba(108,99,255,0.1);color:var(--primary);">
@@ -375,7 +424,7 @@ $dernierArrive = $pdo->query("
         </div>
     </div>
 
-    <!-- ===== MINI STATS ===== -->
+    <!-- MINI STATS -->
     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
         <div class="mini-stat glass-card">
             <div class="icon-circle" style="background:rgba(0,212,170,0.1);color:var(--secondary);">
@@ -433,7 +482,7 @@ $dernierArrive = $pdo->query("
         </div>
     </div>
 
-    <!-- ===== PRÉSENTS + TOP PONCTUELS ===== -->
+    <!-- PRÉSENTS + TOP PONCTUELS -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <!-- Présents -->
         <div class="glass-card p-6 lg:col-span-2">
@@ -544,7 +593,7 @@ $dernierArrive = $pdo->query("
         </div>
     </div>
 
-    <!-- ===== DERNIERS POINTAGES ===== -->
+    <!-- DERNIERS POINTAGES -->
     <div class="glass-card p-6">
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold">
@@ -596,7 +645,7 @@ $dernierArrive = $pdo->query("
         <?php endif; ?>
     </div>
 
-    <!-- ===== FOOTER ===== -->
+    <!-- FOOTER -->
     <div class="text-center text-muted text-xs py-4 border-t border-border-color mt-4">
         <i class="fas fa-sync-alt mr-1"></i>
         Dernière mise à jour : <span id="lastUpdate"><?php echo date('H:i:s'); ?></span>
