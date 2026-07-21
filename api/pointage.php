@@ -1,4 +1,5 @@
 <?php
+// api/pointage.php - Enregistrer un pointage
 header('Content-Type: application/json');
 require_once __DIR__ . '/../config/database.php';
 
@@ -18,8 +19,13 @@ if (!in_array($type, $typesValides)) {
 }
 
 try {
-    $stmt = $pdo->prepare("INSERT INTO pointages (employe_id, type, date, heure) VALUES (?, ?, CURDATE(), CURTIME())");
+    // Version PostgreSQL
+    $stmt = $pdo->prepare("
+        INSERT INTO pointages (employe_id, type, date, heure) 
+        VALUES (?, ?, CURRENT_DATE, CURRENT_TIME)
+    ");
     $stmt->execute([$employeId, $type]);
+    
     echo json_encode(['success' => true, 'message' => 'Pointage enregistré']);
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
