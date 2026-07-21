@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <form method="POST">
             <div class="input-group">
                 <label><i class="fas fa-user"></i>Nom d'utilisateur</label>
-                <input type="text" name="username" class="input-glass" placeholder="hichem.slimani" required>
+                <input type="text" name="username" class="input-glass" placeholder="Nom d'utilisateur" required>
             </div>
             <div class="input-group">
                 <label><i class="fas fa-lock"></i>Mot de passe</label>
