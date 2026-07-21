@@ -1,7 +1,7 @@
 <?php
 // admin/recap.php - Version Ultra WOW
 session_start();
-require_once '../config/database.php';
+require_once __DIR__ . '/../config/database.php';
 require_once '../includes/auth.php';
 requireAdmin();
 

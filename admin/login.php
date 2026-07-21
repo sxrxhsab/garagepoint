@@ -1,7 +1,7 @@
 <?php
 // admin/login.php - Connexion admin
 session_start();
-require_once '../config/database.php';
+require_once __DIR__ . '/../config/database.php';
 
 // Si déjà connecté en admin, rediriger
 if (isset($_SESSION['user_id']) && $_SESSION['role'] === 'admin') {
