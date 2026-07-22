@@ -378,6 +378,10 @@ $dernierArrive = $pdo->query("
             <a href="employes.php" class="btn btn-secondary">
                 <i class="fas fa-users"></i> Employés
             </a>
+            <!-- Dans la section des boutons -->
+<a href="paie.php" class="btn btn-secondary">
+    <i class="fas fa-file-invoice-dollar"></i> Paie
+</a>
             <a href="pointages.php" class="btn btn-secondary">
                 <i class="fas fa-history"></i> Historique
             </a>
