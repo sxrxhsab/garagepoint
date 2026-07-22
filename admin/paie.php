@@ -290,6 +290,86 @@ $nomMois = $nomsMois[$mois] ?? $mois;
             .logo-header img { height: 32px; }
         }
     </style>
+    /* ===== STYLES D'IMPRESSION ===== */
+@media print {
+    body {
+        background: white !important;
+        color: black !important;
+        padding: 10px !important;
+    }
+    .glass-card {
+        background: white !important;
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }
+    .page-title {
+        color: black !important;
+        background: none !important;
+        -webkit-text-fill-color: black !important;
+    }
+    .stat-card {
+        background: #f5f5f5 !important;
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+    }
+    .stat-card .number {
+        color: black !important;
+    }
+    .stat-card .label {
+        color: #555 !important;
+    }
+    .table-glass th {
+        color: black !important;
+        border-bottom: 2px solid #333 !important;
+    }
+    .table-glass td {
+        color: black !important;
+        border-bottom: 1px solid #ddd !important;
+    }
+    .table-glass tr:hover td {
+        background: white !important;
+    }
+    .badge-success, .badge-warning, .badge-danger, .badge-info {
+        color: black !important;
+        background: #eee !important;
+        border: 1px solid #ccc !important;
+    }
+    .btn-primary, .btn-secondary, .btn-danger, .btn-export {
+        display: none !important;
+    }
+    .logo-header img {
+        filter: none !important;
+    }
+    .text-muted {
+        color: #666 !important;
+    }
+    .text-secondary {
+        color: #333 !important;
+    }
+    .number-cell {
+        font-weight: 700 !important;
+        color: black !important;
+    }
+    a {
+        color: black !important;
+        text-decoration: none !important;
+    }
+    .status-dot {
+        display: none !important;
+    }
+    .filter-group {
+        display: none !important;
+    }
+    .page-header {
+        background: white !important;
+        border-bottom: 2px solid #333 !important;
+    }
+    .admin-avatar {
+        background: #333 !important;
+        color: white !important;
+    }
+}
 </head>
 <body>
 
