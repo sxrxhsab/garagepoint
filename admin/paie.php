@@ -1,5 +1,5 @@
 <?php
-// admin/paie.php - Rapport mensuel complet (Version finale)
+// admin/paie.php - Rapport mensuel complet (Version corrigée)
 session_start();
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
@@ -11,13 +11,14 @@ requireAdmin();
 $mois = $_GET['mois'] ?? date('m');
 $annee = $_GET['annee'] ?? date('Y');
 
-// Heures de travail par jour (pour heures supp)
+// Heures de travail par jour
 $HEURES_JOUR = 7;
-$HEURES_SEMAINE = 35;
 
 // ============================================
-// RÉCUPÉRER LES DONNÉES AVEC HEURES CALCULÉES
+// RÉCUPÉRER LES DONNÉES - Version simplifiée
 // ============================================
+
+// 1. Récupérer les jours travaillés, retards et infos de base
 $sql = "
     SELECT 
         e.id,
@@ -26,26 +27,8 @@ $sql = "
         e.poste,
         e.pin_code,
         COUNT(DISTINCT CASE WHEN p.type = 'arrivee' THEN p.date END) as jours_travailles,
-        -- Heures travaillées : addition des écarts entre arrivée et départ
-        COALESCE(
-            SUM(
-                EXTRACT(EPOCH FROM (
-                    (SELECT MAX(p2.heure) FROM pointages p2 
-                     WHERE p2.employe_id = e.id 
-                     AND p2.date = p.date 
-                     AND p2.type IN ('depart', 'pause')
-                     ORDER BY p2.heure DESC LIMIT 1)
-                    - 
-                    (SELECT MIN(p3.heure) FROM pointages p3 
-                     WHERE p3.employe_id = e.id 
-                     AND p3.date = p.date 
-                     AND p3.type = 'arrivee')
-                )) / 3600
-            ), 0
-        ) as heures_travaillees,
         COUNT(CASE WHEN p.type = 'arrivee' AND p.heure > '08:30:00' THEN 1 END) as retards,
         (EXTRACT(DAY FROM (DATE_TRUNC('month', DATE '$annee-$mois-01') + INTERVAL '1 month' - INTERVAL '1 day'))) as jours_mois,
-        MAX(CASE WHEN p.type = 'arrivee' THEN p.heure END) as derniere_arrivee,
         MIN(CASE WHEN p.type = 'arrivee' THEN p.heure END) as premiere_arrivee
     FROM employes e
     LEFT JOIN pointages p ON e.id = p.employe_id 
@@ -59,28 +42,43 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute([$mois, $annee]);
 $rapport = $stmt->fetchAll();
 
-// ============================================
-// AJOUTER UNE ESTIMATION SI PAS DE DÉPART
-// ============================================
+// 2. Calculer les heures travaillées séparément pour chaque employé
 foreach ($rapport as &$r) {
-    // Si l'employé a pointé mais n'a pas d'heures (pas de départ)
-    if ($r['jours_travailles'] > 0 && $r['heures_travailles'] == 0) {
-        // Estimation : 7h par jour travaillé (ou moins si arrivée tardive)
-        $estimation = 7;
-        // Réduire si arrivée tardive
-        if ($r['premiere_arrivee']) {
-            $heureArrivee = (int)date('H', strtotime($r['premiere_arrivee']));
-            if ($heureArrivee >= 10) {
-                $estimation = 5;
-            } elseif ($heureArrivee >= 9) {
-                $estimation = 6;
-            }
+    // Récupérer les pointages de l'employé pour le mois
+    $sqlHeures = "
+        SELECT 
+            date,
+            MIN(CASE WHEN type = 'arrivee' THEN heure END) as arrivee,
+            MAX(CASE WHEN type = 'depart' THEN heure END) as depart,
+            MAX(CASE WHEN type = 'pause' THEN heure END) as derniere_pause
+        FROM pointages
+        WHERE employe_id = ?
+            AND EXTRACT(MONTH FROM date) = ?
+            AND EXTRACT(YEAR FROM date) = ?
+        GROUP BY date
+        HAVING MIN(CASE WHEN type = 'arrivee' THEN heure END) IS NOT NULL
+    ";
+    
+    $stmtHeures = $pdo->prepare($sqlHeures);
+    $stmtHeures->execute([$r['id'], $mois, $annee]);
+    $jours = $stmtHeures->fetchAll();
+    
+    $totalHeures = 0;
+    foreach ($jours as $jour) {
+        if ($jour['depart']) {
+            // Si départ enregistré, calculer la différence
+            $arr = new DateTime($jour['arrivee']);
+            $dep = new DateTime($jour['depart']);
+            $diff = $arr->diff($dep);
+            $totalHeures += $diff->h + ($diff->i / 60);
+        } else {
+            // Pas de départ, estimation à 7h
+            $totalHeures += 7;
         }
-        $r['heures_travaillees'] = $r['jours_travailles'] * $estimation;
-        $r['estime'] = true;
-    } else {
-        $r['estime'] = false;
     }
+    
+    $r['heures_travaillees'] = $totalHeures;
+    $r['estime'] = ($totalHeures > 0 && $totalHeures < $r['jours_travailles'] * 7);
 }
 
 // ============================================
@@ -348,19 +346,6 @@ $nomMois = $nomsMois[$mois] ?? $mois;
             box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
         }
         
-        /* ===== STATUT DOT ===== */
-        .status-dot {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 6px;
-            animation: pulse 2s ease-in-out infinite;
-        }
-        .status-dot.green { background: var(--secondary); }
-        .status-dot.yellow { background: var(--warning); }
-        .status-dot.red { background: var(--accent); }
-        
         /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
             body { padding: 12px; }
@@ -462,7 +447,6 @@ $nomMois = $nomsMois[$mois] ?? $mois;
             .status-dot {
                 display: none !important;
             }
-            /* Cacher les icônes */
             .table-glass th i {
                 display: none !important;
             }
