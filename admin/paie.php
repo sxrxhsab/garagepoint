@@ -1,5 +1,5 @@
 <?php
-// admin/paie.php - Rapport mensuel complet (Version corrigée)
+// admin/paie.php - Rapport mensuel avec estimation des heures
 session_start();
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
@@ -15,7 +15,7 @@ $annee = $_GET['annee'] ?? date('Y');
 $HEURES_JOUR = 7;
 
 // ============================================
-// RÉCUPÉRER LES DONNÉES - Version simplifiée
+// RÉCUPÉRER LES DONNÉES
 // ============================================
 
 // 1. Récupérer les jours travaillés, retards et infos de base
@@ -42,43 +42,60 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute([$mois, $annee]);
 $rapport = $stmt->fetchAll();
 
-// 2. Calculer les heures travaillées séparément pour chaque employé
+// 2. Calculer les heures pour chaque employé
 foreach ($rapport as &$r) {
+    $totalHeures = 0;
+    $estime = false;
+    
     // Récupérer les pointages de l'employé pour le mois
     $sqlHeures = "
         SELECT 
             date,
             MIN(CASE WHEN type = 'arrivee' THEN heure END) as arrivee,
             MAX(CASE WHEN type = 'depart' THEN heure END) as depart,
-            MAX(CASE WHEN type = 'pause' THEN heure END) as derniere_pause
+            COUNT(CASE WHEN type = 'pause' THEN 1 END) as nb_pauses
         FROM pointages
         WHERE employe_id = ?
             AND EXTRACT(MONTH FROM date) = ?
             AND EXTRACT(YEAR FROM date) = ?
         GROUP BY date
-        HAVING MIN(CASE WHEN type = 'arrivee' THEN heure END) IS NOT NULL
     ";
     
     $stmtHeures = $pdo->prepare($sqlHeures);
     $stmtHeures->execute([$r['id'], $mois, $annee]);
     $jours = $stmtHeures->fetchAll();
     
-    $totalHeures = 0;
     foreach ($jours as $jour) {
-        if ($jour['depart']) {
-            // Si départ enregistré, calculer la différence
-            $arr = new DateTime($jour['arrivee']);
-            $dep = new DateTime($jour['depart']);
-            $diff = $arr->diff($dep);
-            $totalHeures += $diff->h + ($diff->i / 60);
-        } else {
-            // Pas de départ, estimation à 7h
-            $totalHeures += 7;
+        if ($jour['arrivee']) {
+            if ($jour['depart']) {
+                // ✅ Départ enregistré : calcul exact
+                $arr = new DateTime($jour['arrivee']);
+                $dep = new DateTime($jour['depart']);
+                $diff = $arr->diff($dep);
+                $heuresJour = $diff->h + ($diff->i / 60);
+                $totalHeures += $heuresJour;
+            } else {
+                // ⚠️ Pas de départ : estimation
+                $estime = true;
+                $heureArrivee = (int)date('H', strtotime($jour['arrivee']));
+                
+                // Estimation selon l'heure d'arrivée
+                if ($heureArrivee <= 8) {
+                    $heuresJour = 7; // 7h si arrivée avant 8h
+                } elseif ($heureArrivee <= 9) {
+                    $heuresJour = 6; // 6h si arrivée entre 8h et 9h
+                } elseif ($heureArrivee <= 10) {
+                    $heuresJour = 5; // 5h si arrivée entre 9h et 10h
+                } else {
+                    $heuresJour = 4; // 4h si arrivée après 10h
+                }
+                $totalHeures += $heuresJour;
+            }
         }
     }
     
     $r['heures_travaillees'] = $totalHeures;
-    $r['estime'] = ($totalHeures > 0 && $totalHeures < $r['jours_travailles'] * 7);
+    $r['estime'] = $estime;
 }
 
 // ============================================
@@ -129,7 +146,6 @@ $nomMois = $nomsMois[$mois] ?? $mois;
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        /* ===== BASE ===== */
         body {
             background: var(--bg-primary);
             font-family: var(--font);
@@ -139,8 +155,6 @@ $nomMois = $nomsMois[$mois] ?? $mois;
                 radial-gradient(ellipse at 10% 20%, rgba(108, 99, 255, 0.05) 0%, transparent 50%),
                 radial-gradient(ellipse at 90% 80%, rgba(0, 212, 170, 0.04) 0%, transparent 50%);
         }
-        
-        /* ===== TITRE ===== */
         .page-title {
             font-size: 28px;
             font-weight: 700;
@@ -148,8 +162,6 @@ $nomMois = $nomsMois[$mois] ?? $mois;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        
-        /* ===== GLASS CARD ===== */
         .glass-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -164,8 +176,6 @@ $nomMois = $nomsMois[$mois] ?? $mois;
         .glass-card:nth-child(2) { animation-delay: 0.10s; }
         .glass-card:nth-child(3) { animation-delay: 0.15s; }
         .glass-card:nth-child(4) { animation-delay: 0.20s; }
-        
-        /* ===== STATS CARDS ===== */
         .stat-card {
             padding: 20px 24px;
             border-radius: var(--radius);
@@ -193,8 +203,6 @@ $nomMois = $nomsMois[$mois] ?? $mois;
             margin-bottom: 8px;
             display: block;
         }
-        
-        /* ===== TABLEAU ===== */
         .table-glass {
             width: 100%;
             border-collapse: collapse;
@@ -220,24 +228,14 @@ $nomMois = $nomsMois[$mois] ?? $mois;
             font-weight: 600;
             font-family: 'JetBrains Mono', monospace;
         }
-        
-        /* ===== BADGES ===== */
         .badge-success { background: rgba(0, 212, 170, 0.12); color: var(--secondary); padding: 2px 12px; border-radius: 50px; font-size: 12px; }
         .badge-warning { background: rgba(255, 217, 61, 0.12); color: var(--warning); padding: 2px 12px; border-radius: 50px; font-size: 12px; }
         .badge-danger { background: rgba(255, 107, 107, 0.12); color: var(--accent); padding: 2px 12px; border-radius: 50px; font-size: 12px; }
         .badge-info { background: rgba(108, 99, 255, 0.12); color: var(--primary); padding: 2px 12px; border-radius: 50px; font-size: 12px; }
         .badge-estime { background: rgba(255, 217, 61, 0.08); color: #b7950b; padding: 2px 12px; border-radius: 50px; font-size: 11px; font-style: italic; }
-        
-        /* ===== BOUTONS ===== */
-        .logo-header {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .logo-header img {
-            height: 44px;
-            filter: drop-shadow(0 4px 20px rgba(108, 99, 255, 0.1));
-        }
+
+        .logo-header { display: flex; align-items: center; gap: 14px; }
+        .logo-header img { height: 44px; filter: drop-shadow(0 4px 20px rgba(108, 99, 255, 0.1)); }
         .btn-secondary {
             padding: 10px 20px;
             background: rgba(255,255,255,0.05);
@@ -310,8 +308,6 @@ $nomMois = $nomsMois[$mois] ?? $mois;
             transform: translateY(-2px);
             box-shadow: 0 8px 24px rgba(0, 184, 148, 0.3);
         }
-        
-        /* ===== FILTRES ===== */
         .filter-group {
             display: flex;
             flex-wrap: wrap;
@@ -345,111 +341,38 @@ $nomMois = $nomsMois[$mois] ?? $mois;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
         }
-        
-        /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
             body { padding: 12px; }
             .page-title { font-size: 22px; }
             .stat-card .number { font-size: 24px; }
             .logo-header img { height: 32px; }
         }
-        
-        /* ===== STYLES D'IMPRESSION ===== */
         @media print {
-            body {
-                background: white !important;
-                color: black !important;
-                padding: 10px !important;
-            }
-            .glass-card {
-                background: white !important;
-                border: 1px solid #ddd !important;
-                box-shadow: none !important;
-                backdrop-filter: none !important;
-                page-break-inside: avoid;
-            }
-            .page-title {
-                color: black !important;
-                background: none !important;
-                -webkit-text-fill-color: black !important;
-            }
-            .stat-card {
-                background: #f5f5f5 !important;
-                border: 1px solid #ddd !important;
-                box-shadow: none !important;
-            }
-            .stat-card .number {
-                color: black !important;
-            }
-            .stat-card .label {
-                color: #555 !important;
-            }
-            .table-glass th {
-                color: black !important;
-                border-bottom: 2px solid #333 !important;
-            }
-            .table-glass td {
-                color: black !important;
-                border-bottom: 1px solid #ddd !important;
-            }
-            .table-glass tr:hover td {
-                background: white !important;
-            }
-            .badge-success, .badge-warning, .badge-danger, .badge-info, .badge-estime {
-                color: black !important;
-                background: #eee !important;
-                border: 1px solid #ccc !important;
-            }
-            .btn-primary, .btn-secondary, .btn-danger, .btn-export {
-                display: none !important;
-            }
-            .logo-header img {
-                filter: none !important;
-            }
-            .text-muted {
-                color: #666 !important;
-            }
-            .text-secondary {
-                color: #333 !important;
-            }
-            .number-cell {
-                font-weight: 700 !important;
-                color: black !important;
-            }
-            a {
-                color: black !important;
-                text-decoration: none !important;
-            }
-            .filter-group {
-                display: none !important;
-            }
-            .page-header {
-                background: white !important;
-                border-bottom: 2px solid #333 !important;
-            }
-            .admin-avatar {
-                background: #333 !important;
-                color: white !important;
-            }
-            .stat-card, .glass-card {
-                page-break-inside: avoid;
-            }
-            table {
-                page-break-inside: auto;
-            }
-            tr {
-                page-break-inside: avoid;
-                page-break-after: auto;
-            }
-            thead {
-                display: table-header-group;
-            }
-            .status-dot {
-                display: none !important;
-            }
-            .table-glass th i {
-                display: none !important;
-            }
+            body { background: white !important; color: black !important; padding: 10px !important; }
+            .glass-card { background: white !important; border: 1px solid #ddd !important; box-shadow: none !important; backdrop-filter: none !important; page-break-inside: avoid; }
+            .page-title { color: black !important; background: none !important; -webkit-text-fill-color: black !important; }
+            .stat-card { background: #f5f5f5 !important; border: 1px solid #ddd !important; box-shadow: none !important; }
+            .stat-card .number { color: black !important; }
+            .stat-card .label { color: #555 !important; }
+            .table-glass th { color: black !important; border-bottom: 2px solid #333 !important; }
+            .table-glass td { color: black !important; border-bottom: 1px solid #ddd !important; }
+            .table-glass tr:hover td { background: white !important; }
+            .badge-success, .badge-warning, .badge-danger, .badge-info, .badge-estime { color: black !important; background: #eee !important; border: 1px solid #ccc !important; }
+            .btn-primary, .btn-secondary, .btn-danger, .btn-export { display: none !important; }
+            .logo-header img { filter: none !important; }
+            .text-muted { color: #666 !important; }
+            .text-secondary { color: #333 !important; }
+            .number-cell { font-weight: 700 !important; color: black !important; }
+            a { color: black !important; text-decoration: none !important; }
+            .filter-group { display: none !important; }
+            .page-header { background: white !important; border-bottom: 2px solid #333 !important; }
+            .admin-avatar { background: #333 !important; color: white !important; }
+            .stat-card, .glass-card { page-break-inside: avoid; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+            thead { display: table-header-group; }
+            .status-dot { display: none !important; }
+            .table-glass th i { display: none !important; }
         }
     </style>
 </head>
@@ -457,9 +380,7 @@ $nomMois = $nomsMois[$mois] ?? $mois;
 
 <div class="max-w-7xl mx-auto">
 
-    <!-- ============================================ -->
     <!-- HEADER -->
-    <!-- ============================================ -->
     <div class="flex flex-wrap justify-between items-center gap-4 mb-8">
         <div class="logo-header">
             <img src="../assets/images/garagelogo.png" alt="GaragePoint">
@@ -477,9 +398,7 @@ $nomMois = $nomsMois[$mois] ?? $mois;
         </div>
     </div>
 
-    <!-- ============================================ -->
     <!-- FILTRES -->
-    <!-- ============================================ -->
     <div class="glass-card">
         <form method="GET" class="filter-group">
             <div>
@@ -523,9 +442,7 @@ $nomMois = $nomsMois[$mois] ?? $mois;
         </form>
     </div>
 
-    <!-- ============================================ -->
     <!-- STATS GLOBALES -->
-    <!-- ============================================ -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="stat-card glass-card">
             <span class="icon">👥</span>
@@ -549,9 +466,7 @@ $nomMois = $nomsMois[$mois] ?? $mois;
         </div>
     </div>
 
-    <!-- ============================================ -->
     <!-- TABLEAU RAPPORT -->
-    <!-- ============================================ -->
     <div class="glass-card">
         <div class="flex justify-between items-center mb-4">
             <h2 class="text-lg font-semibold">
@@ -578,7 +493,7 @@ $nomMois = $nomsMois[$mois] ?? $mois;
                     </thead>
                     <tbody>
                         <?php foreach ($rapport as $r): 
-                            $heures = round($r['heures_travailles'] ?? 0, 1);
+                            $heures = round($r['heures_travaillees'] ?? 0, 1);
                             $moyenneJ = $r['jours_travailles'] > 0 ? round($heures / $r['jours_travailles'], 1) : 0;
                             $absences = $r['jours_mois'] - $r['jours_travailles'];
                             $tauxPresence = $r['jours_mois'] > 0 ? round(($r['jours_travailles'] / $r['jours_mois']) * 100) : 0;
@@ -631,9 +546,7 @@ $nomMois = $nomsMois[$mois] ?? $mois;
         <?php endif; ?>
     </div>
 
-    <!-- ============================================ -->
     <!-- RÉSUMÉ DES HEURES SUPÉRIEURES -->
-    <!-- ============================================ -->
     <div class="glass-card">
         <h3 class="text-lg font-semibold mb-4">
             <i class="fas fa-plus-circle text-green-400 mr-2"></i>
@@ -655,7 +568,7 @@ $nomMois = $nomsMois[$mois] ?? $mois;
         </div>
         <p class="text-xs text-muted mt-4">
             <i class="fas fa-info-circle mr-1"></i>
-            Les heures sont calculées sur la base de 7h par jour travaillé.
+            Les heures sont estimées selon l'heure d'arrivée : 7h (avant 8h), 6h (8h-9h), 5h (9h-10h), 4h (après 10h).
             <span class="badge-estime">estimé</span> indique une valeur approximative (aucun départ enregistré).
         </p>
     </div>
